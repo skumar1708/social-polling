@@ -6,20 +6,29 @@ export default async function handler(
   res: NextApiResponse
 ) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
+    return res?.status(405)?.json({ error: 'Method not allowed' })
   }
 
   try {
     const { title, options, user_id } = req.body
 
     // Validate required fields
-    if (!title || !options || !user_id) {
-      return res.status(400).json({ error: 'Missing required fields' })
+    if (!title?.trim()) {
+      return res?.status(400)?.json({ error: 'Poll title is required' })
+    }
+
+    if (!user_id) {
+      return res?.status(400)?.json({ error: 'User ID is required' })
     }
 
     // Validate options array
-    if (!Array.isArray(options) || options.length < 2) {
-      return res.status(400).json({ error: 'At least 2 options are required' })
+    if (!Array.isArray(options)) {
+      return res?.status(400)?.json({ error: 'Options must be an array' })
+    }
+
+    const validOptions = options.filter(opt => opt?.trim())
+    if (validOptions.length < 2) {
+      return res?.status(400)?.json({ error: 'At least 2 valid options are required' })
     }
 
     // Create poll in Supabase
@@ -27,7 +36,7 @@ export default async function handler(
       .from('polls')
       .insert([
         {
-          title,
+          title: title.trim(),
           user_id,
           created_at: new Date().toISOString(),
         }
@@ -35,12 +44,15 @@ export default async function handler(
       .select()
       .single()
 
-    if (pollError) throw pollError
+    if (pollError) {
+      console.error('Error creating poll:', pollError)
+      return res?.status(500)?.json({ error: 'Failed to create poll' })
+    }
 
     // Create options for the poll
-    const optionsToInsert = options.map((option_text: string) => ({
+    const optionsToInsert = validOptions.map((option_text: string) => ({
       poll_id: poll.id,
-      option_text,
+      option_text: option_text.trim(),
       votes: 0
     }))
 
@@ -48,11 +60,16 @@ export default async function handler(
       .from('poll_options')
       .insert(optionsToInsert)
 
-    if (optionsError) throw optionsError
+    if (optionsError) {
+      console.error('Error creating poll options:', optionsError)
+      // Clean up the poll if options creation fails
+      await supabase.from('polls').delete().eq('id', poll.id)
+      return res?.status(500)?.json({ error: 'Failed to create poll options' })
+    }
 
-    return res.status(201).json({ poll })
+    return res?.status(201)?.json({ poll })
   } catch (error) {
     console.error('Error creating poll:', error)
-    return res.status(500).json({ error: 'Error creating poll' })
+    return res?.status(500)?.json({ error: 'Internal server error' })
   }
 } 

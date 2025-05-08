@@ -17,7 +17,7 @@ interface PollOption {
 
 export default function PollDetails({ pollId }: { pollId: string }) {
   const [poll, setPoll] = useState<Poll | null>(null)
-  const [options, setOptions] = useState<PollOption[]>([])
+  const [, setOptions] = useState<PollOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 

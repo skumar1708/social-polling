@@ -1,50 +1,24 @@
 import { useState } from 'react'
 import { useRouter } from 'next/router'
+import { PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
 
-export default function PollForm({ userId }: { userId: string }) {
+interface PollFormProps {
+  onSubmit: (data: { title: string; options: string[] }) => Promise<void>
+  loading?: boolean
+}
+
+export default function PollForm({ onSubmit, loading = false }: PollFormProps) {
+  const router = useRouter()
   const [title, setTitle] = useState('')
   const [options, setOptions] = useState(['', ''])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const router = useRouter()
 
-  const handleSubmit = async () => {
-    try {
-      setLoading(true)
-      setError('')
-
-      // Validate inputs
-      if (!title.trim()) {
-        throw new Error('Please enter a poll title')
-      }
-
-      const validOptions = options.filter(opt => opt.trim())
-      if (validOptions.length < 2) {
-        throw new Error('Please enter at least 2 options')
-      }
-
-      const res = await fetch('/api/polls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: title.trim(), 
-          options: validOptions, 
-          user_id: userId 
-        })
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to create poll')
-      }
-
-      const data = await res.json()
-      router.push(`/polls/${data.poll.id}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setLoading(false)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (options.some(option => !option.trim())) {
+      alert('Please fill in all options')
+      return
     }
+    await onSubmit({ title, options })
   }
 
   const addOption = () => {
@@ -52,82 +26,100 @@ export default function PollForm({ userId }: { userId: string }) {
   }
 
   const removeOption = (index: number) => {
-    if (options.length > 2) {
-      const newOptions = options.filter((_, i) => i !== index)
-      setOptions(newOptions)
+    if (options.length <= 2) {
+      alert('A poll must have at least 2 options')
+      return
     }
+    setOptions(options.filter((_, i) => i !== index))
+  }
+
+  const updateOption = (index: number, value: string) => {
+    const newOptions = [...options]
+    newOptions[index] = value
+    setOptions(newOptions)
   }
 
   return (
-    <div className="max-w-xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Create New Poll</h1>
-      
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-
-      <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-bold mb-2">
-          Poll Title
-        </label>
-        <input
-          type="text"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Enter your poll question"
-          className="w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={loading}
-        />
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-bold mb-2">
-          Options
-        </label>
-        {options.map((opt, i) => (
-          <div key={i} className="flex gap-2 mb-2">
+    <div className="w-full mx-auto">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label htmlFor="title" className="block text-sm font-semibold leading-6 text-gray-900">
+            Poll Title
+          </label>
+          <div className="mt-2">
             <input
-              value={opt}
-              onChange={e => {
-                const newOpts = [...options]
-                newOpts[i] = e.target.value
-                setOptions(newOpts)
-              }}
-              placeholder={`Option ${i + 1}`}
-              className="flex-1 border p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={loading}
+              type="text"
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              className="block w-full rounded-md border-0 py-2 px-3.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+              placeholder="What would you like to ask?"
             />
-            {options.length > 2 && (
-              <button
-                onClick={() => removeOption(i)}
-                className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                disabled={loading}
-              >
-                Remove
-              </button>
-            )}
           </div>
-        ))}
-      </div>
+        </div>
 
-      <div className="flex gap-4 mb-6">
-        <button
-          onClick={addOption}
-          className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-          disabled={loading}
-        >
-          Add Option
-        </button>
-        <button
-          onClick={handleSubmit}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-          disabled={loading}
-        >
-          {loading ? 'Creating...' : 'Create Poll'}
-        </button>
-      </div>
+        <div>
+          <label className="block text-sm font-semibold leading-6 text-gray-900 mb-4">
+            Poll Options
+          </label>
+          <div className="space-y-4">
+            {options.map((option, index) => (
+              <div key={index} className="flex items-center gap-3">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={option}
+                    onChange={(e) => updateOption(index, e.target.value)}
+                    required
+                    className="block w-full rounded-md border-0 py-2 px-3.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                    placeholder={`Option ${index + 1}`}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  {options.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => removeOption(index)}
+                      className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
+                      title="Remove option"
+                    >
+                      <XMarkIcon className="h-5 w-5" />
+                    </button>
+                  )}
+                  {index === options.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                      title="Add option"
+                    >
+                      <PlusIcon className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-x-4 pt-4 border-t border-gray-900/10">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition-colors duration-200"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Creating...' : 'Create Poll'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }  

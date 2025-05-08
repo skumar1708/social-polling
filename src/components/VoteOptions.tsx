@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { RealtimeChannel } from '@supabase/supabase-js'
 
 interface PollOption {
   id: string
@@ -24,8 +25,98 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
+    let optionsChannel: RealtimeChannel
+    let votesChannel: RealtimeChannel
+
+    const setupRealtimeSubscriptions = () => {
+      console.log('Setting up realtime subscriptions for poll:', pollId)
+      
+      // Subscribe to changes in poll_options
+      optionsChannel = supabase
+        .channel('poll_options_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'poll_options',
+            filter: `poll_id=eq.${pollId}`
+          },
+          (payload) => {
+            console.log('Received poll_options change:', payload)
+            // Immediately update the options
+            setOptions(currentOptions => {
+              const newOptions = [...currentOptions]
+              const newData = payload.new as PollOption
+              const index = newOptions.findIndex(opt => opt.id === newData.id)
+              
+              if (index !== -1) {
+                // Update existing option
+                newOptions[index] = { ...newOptions[index], ...newData }
+              } else {
+                // Add new option
+                newOptions.push(newData)
+              }
+              
+              return newOptions
+            })
+          }
+        )
+        .subscribe((status) => {
+          console.log('Poll options subscription status:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('Successfully subscribed to poll_options changes')
+          }
+        })
+
+      // Subscribe to changes in votes
+      votesChannel = supabase
+        .channel('votes_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'votes',
+            filter: `poll_id=eq.${pollId}`
+          },
+          (payload) => {
+            console.log('Received votes change:', payload)
+            // If the change is related to the current user's vote
+            if (payload.new && (payload.new as Vote).user_id === userId) {
+              console.log('Updating user vote:', payload.new)
+              setUserVote(payload.new as Vote)
+              setSelectedOption((payload.new as Vote).option_id)
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('Votes subscription status:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('Successfully subscribed to votes changes')
+          }
+        })
+
+      // Test the subscription immediately
+      setTimeout(() => {
+        console.log('Testing subscription...')
+        supabase
+          .from('poll_options')
+          .update({ votes: 0 })
+          .eq('poll_id', pollId)
+          .then(({ error }) => {
+            if (error) {
+              console.error('Error testing subscription:', error)
+            } else {
+              console.log('Test update sent successfully')
+            }
+          })
+      }, 2000)
+    }
+
     const fetchOptionsAndVote = async () => {
       try {
+        console.log('Fetching initial data...')
         // Fetch poll options
         const { data: optionsData, error: optionsError } = await supabase
           .from('poll_options')
@@ -33,7 +124,11 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
           .eq('poll_id', pollId)
           .order('created_at', { ascending: true })
 
-        if (optionsError) throw optionsError
+        if (optionsError) {
+          console.error('Error fetching options:', optionsError)
+          throw optionsError
+        }
+        console.log('Fetched initial options:', optionsData)
         setOptions(optionsData || [])
 
         // Fetch user's vote if exists
@@ -44,10 +139,15 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
           .eq('user_id', userId)
           .maybeSingle()
 
-        if (voteError && voteError.code !== 'PGRST116') throw voteError
+        if (voteError && voteError.code !== 'PGRST116') {
+          console.error('Error fetching vote:', voteError)
+          throw voteError
+        }
+        console.log('Fetched user vote:', voteData)
         setUserVote(voteData)
         if (voteData) setSelectedOption(voteData.option_id)
       } catch (err) {
+        console.error('Error in fetchOptionsAndVote:', err)
         setError(err instanceof Error ? err.message : 'Error fetching options')
       } finally {
         setLoading(false)
@@ -56,6 +156,18 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
 
     if (pollId && userId) {
       fetchOptionsAndVote()
+      setupRealtimeSubscriptions()
+    }
+
+    // Cleanup subscriptions when component unmounts
+    return () => {
+      console.log('Cleaning up realtime subscriptions')
+      if (optionsChannel) {
+        optionsChannel.unsubscribe()
+      }
+      if (votesChannel) {
+        votesChannel.unsubscribe()
+      }
     }
   }, [pollId, userId])
 
