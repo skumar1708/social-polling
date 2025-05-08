@@ -49,8 +49,11 @@ export default function PollResults({ pollId }: PollResultsProps) {
   const [chartType, setChartType] = useState<'bar' | 'pie'>('bar')
 
   useEffect(() => {
+    console.log('Setting up real-time subscriptions for poll:', pollId)
+
     const fetchResults = async () => {
       try {
+        console.log('Fetching poll results...')
         setLoading(true)
         setError(null)
 
@@ -61,7 +64,11 @@ export default function PollResults({ pollId }: PollResultsProps) {
           .eq('poll_id', pollId)
           .order('votes', { ascending: false })
 
-        if (optionsError) throw optionsError
+        if (optionsError) {
+          console.error('Error fetching options:', optionsError)
+          throw optionsError
+        }
+        console.log('Fetched options:', optionsData)
 
         // Fetch all votes for the poll
         const { data: votesData, error: votesError } = await supabase
@@ -69,24 +76,29 @@ export default function PollResults({ pollId }: PollResultsProps) {
           .select('*')
           .eq('poll_id', pollId)
 
-        if (votesError) throw votesError
+        if (votesError) {
+          console.error('Error fetching votes:', votesError)
+          throw votesError
+        }
+        console.log('Fetched votes:', votesData)
 
         setOptions(optionsData || [])
         setVotes(votesData || [])
         setTotalVotes(votesData?.length || 0)
       } catch (err) {
+        console.error('Error in fetchResults:', err)
         setError('Failed to load poll results')
-        console.error('Error fetching poll results:', err)
       } finally {
         setLoading(false)
       }
     }
 
+    // Initial fetch
     fetchResults()
 
     // Subscribe to real-time updates for both options and votes
-    const optionsSubscription = supabase
-      .channel('poll_options_changes')
+    const optionsChannel = supabase
+      .channel(`poll_options_${pollId}`)
       .on(
         'postgres_changes',
         {
@@ -95,14 +107,14 @@ export default function PollResults({ pollId }: PollResultsProps) {
           table: 'poll_options',
           filter: `poll_id=eq.${pollId}`,
         },
-        () => {
+        (payload) => {
+          console.log('Received poll_options change:', payload)
           fetchResults()
         }
       )
-      .subscribe()
 
-    const votesSubscription = supabase
-      .channel('votes_changes')
+    const votesChannel = supabase
+      .channel(`votes_${pollId}`)
       .on(
         'postgres_changes',
         {
@@ -111,15 +123,40 @@ export default function PollResults({ pollId }: PollResultsProps) {
           table: 'votes',
           filter: `poll_id=eq.${pollId}`,
         },
-        () => {
+        (payload) => {
+          console.log('Received votes change:', payload)
           fetchResults()
         }
       )
-      .subscribe()
 
+    // Subscribe to channels and log status
+    optionsChannel.subscribe((status) => {
+      console.log('Poll options subscription status:', status)
+      if (status === 'SUBSCRIBED') {
+        console.log('Successfully subscribed to poll options changes')
+      } else if (status === 'CLOSED') {
+        console.log('Poll options subscription closed')
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('Poll options subscription error')
+      }
+    })
+
+    votesChannel.subscribe((status) => {
+      console.log('Votes subscription status:', status)
+      if (status === 'SUBSCRIBED') {
+        console.log('Successfully subscribed to votes changes')
+      } else if (status === 'CLOSED') {
+        console.log('Votes subscription closed')
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('Votes subscription error')
+      }
+    })
+
+    // Cleanup function
     return () => {
-      optionsSubscription.unsubscribe()
-      votesSubscription.unsubscribe()
+      console.log('Cleaning up subscriptions for poll:', pollId)
+      optionsChannel.unsubscribe()
+      votesChannel.unsubscribe()
     }
   }, [pollId])
 
