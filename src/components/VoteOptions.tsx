@@ -18,6 +18,7 @@ interface Vote {
 
 export default function VoteOptions({ pollId, userId }: { pollId: string; userId: string }) {
   const [options, setOptions] = useState<PollOption[]>([])
+  const [votes, setVotes] = useState<Vote[]>([])
   const [selectedOption, setSelectedOption] = useState<string | null>(null)
   const [userVote, setUserVote] = useState<Vote | null>(null)
   const [loading, setLoading] = useState(true)
@@ -88,6 +89,8 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
               setUserVote(payload.new as Vote)
               setSelectedOption((payload.new as Vote).option_id)
             }
+            // Refresh votes to update counts
+            fetchVotes()
           }
         )
         .subscribe((status) => {
@@ -96,22 +99,20 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
             console.log('Successfully subscribed to votes changes')
           }
         })
+    }
 
-      // Test the subscription immediately
-      setTimeout(() => {
-        console.log('Testing subscription...')
-        supabase
-          .from('poll_options')
-          .update({ votes: 0 })
+    const fetchVotes = async () => {
+      try {
+        const { data: votesData, error: votesError } = await supabase
+          .from('votes')
+          .select('*')
           .eq('poll_id', pollId)
-          .then(({ error }) => {
-            if (error) {
-              console.error('Error testing subscription:', error)
-            } else {
-              console.log('Test update sent successfully')
-            }
-          })
-      }, 2000)
+
+        if (votesError) throw votesError
+        setVotes(votesData || [])
+      } catch (err) {
+        console.error('Error fetching votes:', err)
+      }
     }
 
     const fetchOptionsAndVote = async () => {
@@ -130,6 +131,9 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
         }
         console.log('Fetched initial options:', optionsData)
         setOptions(optionsData || [])
+
+        // Fetch all votes
+        await fetchVotes()
 
         // Fetch user's vote if exists
         const { data: voteData, error: voteError } = await supabase
@@ -180,12 +184,6 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
 
       // If user already voted, update their vote
       if (userVote) {
-        // Decrement vote count for previous option
-        const { error: decrementError } = await supabase.rpc('decrement_vote_count', {
-          option_id: userVote.option_id
-        })
-        if (decrementError) throw decrementError
-
         // Update vote record
         const { error: updateError } = await supabase
           .from('votes')
@@ -208,24 +206,17 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
         if (insertError) throw insertError
       }
 
-      // Increment vote count for new option
-      const { error: incrementError } = await supabase.rpc('increment_vote_count', {
-        option_id: selectedOption
-      })
-      if (incrementError) throw incrementError
-
       // Update local state
       setUserVote({ id: 'temp', poll_id: pollId, option_id: selectedOption, user_id: userId })
       
-      // Refresh options to show updated vote counts
-      const { data: optionsData, error: optionsError } = await supabase
-        .from('poll_options')
+      // Refresh votes to show updated counts
+      const { data: votesData, error: votesError } = await supabase
+        .from('votes')
         .select('*')
         .eq('poll_id', pollId)
-        .order('created_at', { ascending: true })
 
-      if (optionsError) throw optionsError
-      setOptions(optionsData || [])
+      if (votesError) throw votesError
+      setVotes(votesData || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error submitting vote')
     } finally {
@@ -236,10 +227,16 @@ export default function VoteOptions({ pollId, userId }: { pollId: string; userId
   if (loading) return <div className="text-center py-4">Loading options...</div>
   if (error) return <div className="text-red-500 py-4">{error}</div>
 
+  // Calculate vote counts for each option
+  const optionVotes = options.map(option => ({
+    ...option,
+    votes: votes.filter(vote => vote.option_id === option.id).length
+  }))
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        {options.map(option => (
+        {optionVotes.map(option => (
           <div
             key={option.id}
             className={`p-4 border rounded-lg cursor-pointer transition-colors ${

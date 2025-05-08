@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { supabase } from '@/lib/supabase'
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/solid'
+import { TrashIcon } from '@heroicons/react/24/solid'
 import { useAuth } from '@/hooks/useAuth'
 
 interface Poll {
@@ -40,10 +40,6 @@ export default function Dashboard() {
     }
   }
 
-  const handleCreatePoll = () => {
-    router.push('/polls/new')
-  }
-
   const handleDeletePoll = async (pollId: number) => {
     if (!confirm('Are you sure you want to delete this poll? This action cannot be undone.')) {
       return
@@ -75,13 +71,6 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">My Polls</h1>
-        <button
-          onClick={handleCreatePoll}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
-          Create Poll
-        </button>
       </div>
 
       {loading ? (
@@ -92,15 +81,6 @@ export default function Dashboard() {
         <div className="text-center py-12">
           <h3 className="mt-2 text-sm font-medium text-gray-900">No polls</h3>
           <p className="mt-1 text-sm text-gray-500">Get started by creating a new poll.</p>
-          <div className="mt-6">
-            <button
-              onClick={handleCreatePoll}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              <PlusIcon className="h-5 w-5 mr-2" />
-              Create Poll
-            </button>
-          </div>
         </div>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
