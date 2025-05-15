@@ -38,9 +38,10 @@ interface Vote {
 
 interface PollResultsProps {
   pollId: string
+  showBreakdownOnly?: boolean
 }
 
-export default function PollResults({ pollId }: PollResultsProps) {
+export default function PollResults({ pollId, showBreakdownOnly = false }: PollResultsProps) {
   const [options, setOptions] = useState<PollOption[]>([])
   const [votes, setVotes] = useState<Vote[]>([])
   const [loading, setLoading] = useState(true)
@@ -225,50 +226,51 @@ export default function PollResults({ pollId }: PollResultsProps) {
         position: 'bottom' as const,
       },
       title: {
-        display: true,
-        text: 'Poll Results',
+        display: false,
       },
     },
   }
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Results</h2>
-          <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
-            <button
-              onClick={() => setChartType('bar')}
-              className={`p-2 rounded-md transition-all duration-200 ${
-                chartType === 'bar'
-                  ? 'bg-white shadow-sm text-indigo-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              title="Bar Chart"
-            >
-              <ChartBarIcon className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => setChartType('pie')}
-              className={`p-2 rounded-md transition-all duration-200 ${
-                chartType === 'pie'
-                  ? 'bg-white shadow-sm text-indigo-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              title="Pie Chart"
-            >
-              <ChartPieIcon className="h-5 w-5" />
-            </button>
+      {!showBreakdownOnly && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-semibold text-gray-900">Results</h2>
+            <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setChartType('bar')}
+                className={`p-2 rounded-md transition-all duration-200 ${
+                  chartType === 'bar'
+                    ? 'bg-white shadow-sm text-indigo-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Bar Chart"
+              >
+                <ChartBarIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setChartType('pie')}
+                className={`p-2 rounded-md transition-all duration-200 ${
+                  chartType === 'pie'
+                    ? 'bg-white shadow-sm text-indigo-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Pie Chart"
+              >
+                <ChartPieIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+          <div className="h-[300px] sm:h-[350px] md:h-[400px] transition-all duration-300">
+            {chartType === 'bar' ? (
+              <Bar data={chartData} options={chartOptions} />
+            ) : (
+              <Pie data={chartData} options={chartOptions} />
+            )}
           </div>
         </div>
-        <div className="h-[400px] transition-all duration-300">
-          {chartType === 'bar' ? (
-            <Bar data={chartData} options={chartOptions} />
-          ) : (
-            <Pie data={chartData} options={chartOptions} />
-          )}
-        </div>
-      </div>
+      )}
 
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Vote Breakdown</h2>
